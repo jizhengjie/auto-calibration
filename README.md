@@ -4,9 +4,12 @@
 1. Create conda environment:
 `
 $conda create -n auto-calibration python=3.6
+`
+2. Activate environment:
+`
 $conda activate auto-calibration
 `
-2. Install required packages:
+3. Install required packages:
 `
 $bash install.bash
 `
