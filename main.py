@@ -28,7 +28,7 @@ def main():
         logging.critical("Failed to load data.")
         return
     else:
-        logging.info("Successfully loaded data.")
+        logging.info("Successfully loaded "+str(data.shape[0])+" images.")
 
     # Run algorithm
     start = time.time()
