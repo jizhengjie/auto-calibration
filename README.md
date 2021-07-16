@@ -36,3 +36,9 @@ Run code script on LINUX:
 `
 $bash run.bash
 `
+
+## Help
+To see all args, run:
+`
+python main.py --help
+`
