@@ -9,10 +9,12 @@ def process_img(src):
 def load_data(data_path):
     data = []
     img_list = os.listdir(data_path)
+    img_list.sort()
     for img_idx, img_path in enumerate(img_list):
         src = cv.imread(data_path+img_path) # ndarray, (540, 960, 3)
         img = process_img(src)
-        data.append(img)
+        if img is not None:
+            data.append(img)
     data = np.array(data)
     return data
 

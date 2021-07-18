@@ -47,6 +47,7 @@ def main():
     else:
         with open('log.json','a') as f:
             json.dump(output, f)
+    print("Extrinsic parameters: ", output)
     logging.info("Successfully wrote log.")
 
 
