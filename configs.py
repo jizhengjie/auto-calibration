@@ -2,13 +2,15 @@ import cv2 as cv
 import numpy as np
 
 # Global
-ROOT = '/Users/ruoji/Documents/SJTU/VE450/auto-calibration'
 
 # Parameters for image processing
 IMAGE_SIZE = (540, 960, 3)
 
 # Parameters for camera calibration
 ASPECT_RATIO = 1
+
+# KLT capture rate
+KLT_CAP_RATE = 1
 
 # params for ShiTomasi corner detection
 feature_params = dict( maxCorners = 500,   # How many pts. to locate
