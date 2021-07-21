@@ -95,7 +95,11 @@ class FullyAutomaticCalibration():
                     if dist > 300 and t0 != None:
                         edges = cv.line(edges, t0,t1, 1, 1)
                 # Map to diamond space
-                points += self.map_to_diamond_space(frame, edges)
+                if img_idx == self.data.shape[0]-1:
+                    show_image = True
+                else:
+                    show_image = False
+                points += self.map_to_diamond_space(frame, edges, show_image)
                 # Write to video
                 img = cv.add(frame,mask)
                 out.write(img)
@@ -105,6 +109,7 @@ class FullyAutomaticCalibration():
         # Accumulate points
         c = Counter(points)
         global_maximum = c.most_common(3)
+        print("Candidate first VPs and votes:", global_maximum)
         # Visualize
         r,c = np.nonzero(edges > 0.5)
         x = np.array([c,r],"i").T
@@ -120,22 +125,23 @@ class FullyAutomaticCalibration():
         f,ax = plt.subplots(1, figsize=(10,5))
         for i in range(1):
             ax.plot(global_maximum[i][0][1], global_maximum[i][0][0], "r+")
-        # ax.imshow(np.sqrt(P.A), cmap="Greys")
+        ax.imshow(np.sqrt(P.A), cmap="Greys")
         ax.set(title="Accumulator space",xticks=[],yticks=[])
         plt.tight_layout()
         plt.show()
         print("Accumulated first VP in diamond space is: ", global_maximum[0][0])
         return global_maximum[0][0]
 
-    def map_to_diamond_space(self, frame, edges):
+    def map_to_diamond_space(self, frame, edges, show_image=False):
         # Map to dimond space, return points
         r,c = np.nonzero(edges > 0.5)
         x = np.array([c,r],"i").T
         weights = edges[r,c]
-        # _,ax = plt.subplots(1, figsize=(5,5))
-        # ax.imshow(edges, cmap="Greys")
-        # ax.set(title="Edge map - observations", xticks=[], yticks=[])
-        # plt.tight_layout()
+        if show_image:
+            _,ax = plt.subplots(1, figsize=(5,5))
+            ax.imshow(edges, cmap="Greys")
+            ax.set(title="Edge map - observations", xticks=[], yticks=[])
+            plt.tight_layout()
         h,w = frame.shape[:2]
         bbox=(0,0,w,h)
         d = 1024
@@ -145,23 +151,27 @@ class FullyAutomaticCalibration():
         P.insert(x, weights)
         # Find local maxima
         p, w = P.find_peaks(min_dist=0, prominence=2.5, t=0.6, prominence_radius=1)
-        # f,ax = plt.subplots(1, figsize=(10,5))
-        # ax.plot(p[:,1], p[:,0], "r+")
-        # ax.imshow(np.sqrt(P.A), cmap="Greys")
-        # ax.set(title="Accumulator space",xticks=[],yticks=[])
-        # plt.tight_layout()
+        if show_image:
+            f,ax = plt.subplots(1, figsize=(10,5))
+            ax.plot(p[:,1], p[:,0], "r+")
+            ax.imshow(np.sqrt(P.A), cmap="Greys")
+            ax.set(title="Accumulator space",xticks=[],yticks=[])
+            plt.tight_layout()
         h = P.inverse(p)
         X,Y = utils.line_segments_from_homogeneous(h, bbox)
-        # f,ax = plt.subplots(figsize=(5,5))
-        # ax.imshow(frame, cmap="gray")
+        if show_image:
+            f,ax = plt.subplots(figsize=(5,5))
+            ax.imshow(frame, cmap="gray")
         for x,y in zip(X,Y):
             if x is None or y is None:
                 continue
             l = Line2D(x,y, color="r")
-            # ax.add_artist(l)
-        # ax.set(title="Image with detected lines", xticks=[], yticks=[])
-        # plt.tight_layout()
-        # plt.show()
+            if show_image:
+                ax.add_artist(l)
+        if show_image:
+            ax.set(title="Image with detected lines", xticks=[], yticks=[])
+            plt.tight_layout()
+            plt.show()
         res = []
         for i in range(p.shape[0]):
             res.append((p[i][0], p[i][1]))
