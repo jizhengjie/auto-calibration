@@ -1,6 +1,7 @@
 import os, sys, logging, argparse
 import numpy as np
 import cv2 as cv
+from numpy.core.numeric import zeros_like
 
 from skimage.io import imread
 from skimage.filters import sobel
@@ -9,6 +10,7 @@ from matplotlib.lines import Line2D
 from pclines import PCLines
 from pclines import utils
 from collections import Counter
+from scipy import ndimage
 
 from configs import *
 from utils import *
@@ -87,8 +89,8 @@ class FullyAutomaticCalibration():
                     a,b = new.ravel() #tmp new value
                     c,d = old.ravel() #tmp old value
                     line_list.append((a,b))
-                    mask = cv.line(mask, (a,b),(c,d), (0,255,0), 1)
-                    frame = cv.circle(frame,(a,b),2,(0,0,255), -1)
+                    mask = cv.line(mask, (int(a),int(b)),(int(c),int(d)), (0,255,0), 1)
+                    frame = cv.circle(frame,(int(a),int(b)),2,(0,0,255), -1)
                     dist = self.euclidean_distance((a,b), (c,d))
                     t0, t1 = self.extend_line(a,b,c,d,IMAGE_SIZE[1]-1,IMAGE_SIZE[0]-1)
                     # accumulate extended lines, filter out stable points
@@ -126,7 +128,7 @@ class FullyAutomaticCalibration():
         for i in range(1):
             ax.plot(global_maximum[i][0][1], global_maximum[i][0][0], "r+")
         ax.imshow(np.sqrt(P.A), cmap="Greys")
-        ax.set(title="Accumulator space",xticks=[],yticks=[])
+        ax.set(title="Accumulator space final",xticks=[],yticks=[])
         plt.tight_layout()
         plt.show()
         print("Accumulated first VP in diamond space is: ", global_maximum[0][0])
@@ -177,11 +179,123 @@ class FullyAutomaticCalibration():
             res.append((p[i][0], p[i][1]))
         return res
 
+    def getBinNumber(self, orient):
+        orient += np.pi
+        bin_number = 0
+        gap = np.pi / 4
+        cur = np.pi / 4
+        for _ in range(0, 8):
+            if orient < cur:
+                return bin_number
+            else:
+                cur += gap
+                bin_number += 1
+        return bin_number
+
+    def extend_line_with_k(self, x1, y1, k, x, y):
+        b = y1 - k * x1
+        t = []
+        res = int(b)
+        if res >= 0 and res <= y:
+            t.append((0, res))
+
+        if k != 0:
+            res = int(-b/k)
+            if res >= 0 and res <= x:
+                t.append((res, 0))
+
+        res = int(k*x+b)
+        if res >= 0 and res <= y:
+            t.append((x, res))
+        
+        if k != 0:
+            res = int((y-b)/k)
+            if res >= 0 and res <= x:
+                t.append((res, y))
+
+        if len(t) != 2:
+            return None, None
+        else:
+            return t[0], t[1]
+
+    def backgroundModel(self):
+        alpha = 0.95
+        tau_1 = 0.5
+        tau_2 = 0.4
+
+        frame = self.data[0]
+        h,w = frame.shape[:2]
+        frame_grey = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        print(frame_grey.shape)
+        vertical_edge = ndimage.convolve(frame_grey, [[1, 0,  -1]], mode='mirror')
+        horizontal_edge = ndimage.convolve(frame_grey, [[-1], [0], [1]], mode='mirror')
+        # cv.imshow("original", frame)
+        # cv.imshow("grey", frame_grey)
+        # cv.imshow("h", horizontal_edge)
+        # cv.imshow("v", vertical_edge)
+        
+
+        magnitude = np.sqrt(vertical_edge ** 2 + horizontal_edge ** 2)
+        orientation = np.arctan2(vertical_edge, horizontal_edge)
+        H_t = np.zeros((h, w, 8)) # 8 bins for each pixel
+        for row in range(0, h):
+            for col in range(0, w):
+                bin_number = self.getBinNumber(orientation[row][col])
+                H_t[row][col][bin_number] = magnitude[row][col]
+
+        # initialize B
+        B_t = np.copy(H_t)
+
+        img_idx = 1
+        points = []
+        while img_idx < 5:
+            print(img_idx)
+            frame = self.data[img_idx]
+            frame_grey = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            vertical_edge = ndimage.convolve(frame_grey, [[1, 0,  -1]], mode='mirror')
+            horizontal_edge = ndimage.convolve(frame_grey, [[-1], [0], [1]], mode='mirror')
+
+            magnitude = np.sqrt(vertical_edge ** 2 + horizontal_edge ** 2)
+            orientation = np.arctan2(vertical_edge, horizontal_edge)
+            H_t = np.zeros((h, w, 8)) # 8 bins for each pixel
+            edges = np.zeros_like(frame)
+            edges = cv.cvtColor(edges, cv.COLOR_BGR2GRAY)
+            for row in range(0, h):
+                print(row)
+                for col in range(0, w):
+                    bin_number = self.getBinNumber(orientation[row][col])
+                    m = magnitude[row][col]
+                    H_t[row][col][bin_number] = m
+
+                    if m > tau_1:
+                        # perform backgroun test
+                        if (m - B_t[row][col][bin_number]) > tau_2:
+                            # further processed and filtered
+                            if bin_number in [0, 3, 4, 7]:
+                                edges[row][col] = 100
+                                # this edge can vote
+                                # t0, t1 = self.extend_line_with_k(row, col, orientation[row][col], IMAGE_SIZE[1]-1,IMAGE_SIZE[0]-1)
+                                #edges = cv.line(edges, t0, t1, 1, 1)
+            # points += self.map_to_diamond_space(frame, edges, show_image=True)
+
+            cv.imshow("a", edges)
+            cv.waitKey(0)
+            # update backgroun model
+            B_t = alpha * B_t + (1 - alpha) * H_t
+            img_idx += 1
+
+        c = Counter(points)
+        global_maximum = c.most_common(3)
+        print("Candidate second VPs and votes:", global_maximum)
+        print("Accumulated first VP in diamond space is: ", global_maximum[0][0])
+        return global_maximum[0][0]
+
     def run(self):
         # TODO: First VP extraction
-        first_VP = self.KLT()
+        # first_VP = self.KLT()
 
         # TODO: Second VP
+        second_VP = self.backgroundModel()
 
         # TODO: Third VP, Principal Point, Focal Length
 

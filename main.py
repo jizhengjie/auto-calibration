@@ -6,7 +6,7 @@ from configs import *
 from utils import *
 
 # Logging level
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 # Set argparse
 parser = argparse.ArgumentParser()
