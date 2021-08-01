@@ -220,7 +220,7 @@ class FullyAutomaticCalibration():
 
     def backgroundModel(self):
         alpha = 0.95
-        tau_1 = 0.5
+        tau_1 = 0.2
         tau_2 = 0.4
 
         frame = self.data[0]
@@ -248,8 +248,8 @@ class FullyAutomaticCalibration():
 
         img_idx = 1
         points = []
-        while img_idx < 5:
-            print(img_idx)
+        while img_idx < 10:
+            print("++++++++++++++++++++", img_idx)
             frame = self.data[img_idx]
             frame_grey = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             vertical_edge = ndimage.convolve(frame_grey, [[1, 0,  -1]], mode='mirror')
@@ -272,17 +272,17 @@ class FullyAutomaticCalibration():
                         if (m - B_t[row][col][bin_number]) > tau_2:
                             # further processed and filtered
                             if bin_number in [0, 3, 4, 7]:
-                                edges[row][col] = 100
                                 # this edge can vote
-                                # t0, t1 = self.extend_line_with_k(row, col, orientation[row][col], IMAGE_SIZE[1]-1,IMAGE_SIZE[0]-1)
-                                #edges = cv.line(edges, t0, t1, 1, 1)
+                                t0, t1 = self.extend_line_with_k(row, col, orientation[row][col], IMAGE_SIZE[1]-1,IMAGE_SIZE[0]-1)
+                                edges = cv.line(edges, t0, t1, 1, 1)
             # points += self.map_to_diamond_space(frame, edges, show_image=True)
 
             cv.imshow("a", edges)
-            cv.waitKey(0)
+            cv.waitKey(32)
             # update backgroun model
             B_t = alpha * B_t + (1 - alpha) * H_t
             img_idx += 1
+            
 
         c = Counter(points)
         global_maximum = c.most_common(3)
