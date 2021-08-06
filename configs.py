@@ -10,11 +10,11 @@ IMAGE_SIZE = (540, 960, 3)
 ASPECT_RATIO = 1
 
 # KLT capture rate
-KLT_CAP_RATE = 1
+KLT_CAP_RATE = 4
 
 # params for ShiTomasi corner detection
 feature_params = dict( maxCorners = 20,   # How many pts. to locate
-                       qualityLevel = 0.2,  # b/w 0 & 1, min. quality below which everyone is rejected
+                       qualityLevel = 0.3,  # b/w 0 & 1, min. quality below which everyone is rejected
                        minDistance = 20)   # Min eucledian distance b/w corners detected
                        # blockSize = 3) # Size of an average block for computing a derivative covariation matrix over each pixel neighborhood
 

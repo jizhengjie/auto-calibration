@@ -48,7 +48,7 @@ class FullyAutomaticCalibration():
             return t[0], t[1]
 
     def euclidean_distance(self, x, y):
-        return np.sqrt((x[0] - x[1])**2 + (y[0] - y[1])**2)
+        return np.sqrt((x[0] - y[0])**2 + (x[1] - y[1])**2)
 
     def KLT(self):
         # Parameters
@@ -74,7 +74,7 @@ class FullyAutomaticCalibration():
                 if start == True:
                     start = False
                     h, w, _ = frame.shape
-                    out = cv.VideoWriter(output_file, fourcc, 30, (w, h), True)
+                    out = cv.VideoWriter(output_file, fourcc, 30, (w, h), 0)
                 frame = self.data[img_idx]
                 frame_gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
                 p1, st, err = cv.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
@@ -92,10 +92,11 @@ class FullyAutomaticCalibration():
                     mask = cv.line(mask, (int(a),int(b)),(int(c),int(d)), (0,255,0), 1)
                     frame = cv.circle(frame,(int(a),int(b)),2,(0,0,255), -1)
                     dist = self.euclidean_distance((a,b), (c,d))
+                    # print(dist)
                     t0, t1 = self.extend_line(a,b,c,d,IMAGE_SIZE[1]-1,IMAGE_SIZE[0]-1)
                     # accumulate extended lines, filter out stable points
-                    if dist > 300 and t0 != None:
-                        edges = cv.line(edges, t0,t1, 1, 1)
+                    if dist > 5 and t0 != None:
+                        edges = cv.line(edges, t0, t1, 255, 5)
                 # Map to diamond space
                 if img_idx == self.data.shape[0]-1:
                     show_image = True
@@ -103,13 +104,16 @@ class FullyAutomaticCalibration():
                     show_image = False
                 points += self.map_to_diamond_space(frame, edges, show_image)
                 # Write to video
-                img = cv.add(frame,mask)
+                img = cv.add(frame_gray,edges)
                 out.write(img)
+                # cv.imshow("a frame", img)
+                # cv.waitKey(0)
                 # Now update previous points
                 p0 = good_new.reshape(-1,1,2)
             img_idx += 1
         # Accumulate points
         c = Counter(points)
+        print(c)
         global_maximum = c.most_common(3)
         print("Candidate first VPs and votes:", global_maximum)
         # Visualize
@@ -220,13 +224,13 @@ class FullyAutomaticCalibration():
 
     def backgroundModel(self):
         alpha = 0.95
-        tau_1 = 0.2
-        tau_2 = 0.4
+        tau_1 = 15
+        tau_2 = 15
 
         frame = self.data[0]
         h,w = frame.shape[:2]
         frame_grey = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-        print(frame_grey.shape)
+        # print(frame_grey.shape)
         vertical_edge = ndimage.convolve(frame_grey, [[1, 0,  -1]], mode='mirror')
         horizontal_edge = ndimage.convolve(frame_grey, [[-1], [0], [1]], mode='mirror')
         # cv.imshow("original", frame)
@@ -236,6 +240,7 @@ class FullyAutomaticCalibration():
         
 
         magnitude = np.sqrt(vertical_edge ** 2 + horizontal_edge ** 2)
+        # print(magnitude)
         orientation = np.arctan2(vertical_edge, horizontal_edge)
         H_t = np.zeros((h, w, 8)) # 8 bins for each pixel
         for row in range(0, h):
@@ -248,8 +253,9 @@ class FullyAutomaticCalibration():
 
         img_idx = 1
         points = []
-        while img_idx < 10:
-            print("++++++++++++++++++++", img_idx)
+        while img_idx < 4:
+            count = 0
+            # print("++++++++++++++++++++", img_idx)
             frame = self.data[img_idx]
             frame_grey = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             vertical_edge = ndimage.convolve(frame_grey, [[1, 0,  -1]], mode='mirror')
@@ -261,24 +267,27 @@ class FullyAutomaticCalibration():
             edges = np.zeros_like(frame)
             edges = cv.cvtColor(edges, cv.COLOR_BGR2GRAY)
             for row in range(0, h):
-                print(row)
+                # print(row)
                 for col in range(0, w):
                     bin_number = self.getBinNumber(orientation[row][col])
                     m = magnitude[row][col]
                     H_t[row][col][bin_number] = m
-
+                    # print(m)
                     if m > tau_1:
                         # perform backgroun test
+                        # print(m - B_t[row][col][bin_number])
                         if (m - B_t[row][col][bin_number]) > tau_2:
                             # further processed and filtered
                             if bin_number in [0, 3, 4, 7]:
                                 # this edge can vote
+                                count += 1
+                                print("count: ", count)
                                 t0, t1 = self.extend_line_with_k(row, col, orientation[row][col], IMAGE_SIZE[1]-1,IMAGE_SIZE[0]-1)
-                                edges = cv.line(edges, t0, t1, 1, 1)
-            # points += self.map_to_diamond_space(frame, edges, show_image=True)
+                                edges = cv.line(edges, t0, t1, 255, 1)
+            points += self.map_to_diamond_space(frame, edges, show_image=True)
 
             cv.imshow("a", edges)
-            cv.waitKey(32)
+            cv.waitKey(0)
             # update backgroun model
             B_t = alpha * B_t + (1 - alpha) * H_t
             img_idx += 1
@@ -303,11 +312,10 @@ class FullyAutomaticCalibration():
 
         # TODO: Camera Calibration from VPs
 
-        # Return R and T as dict
+        # Return R
         # example values are:
         R = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        T = [0.0, 0.0, 0.0]
-        return {'R': R, 'T': T}
+        return {'R': R}
 
 
 if __name__ == "__main__":
